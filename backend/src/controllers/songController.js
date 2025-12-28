@@ -94,11 +94,52 @@ const searchSongs = async (req, res) => {
     }
 };
 
+// @desc    Update song play count and last played time
+// @route   POST /api/songs/:id/play
+// @access  Public
+const playSong = async (req, res) => {
+    try {
+        const song = await Song.findById(req.params.id);
+        if (song) {
+            song.playCount = (song.playCount || 0) + 1;
+            song.lastPlayed = new Date();
+            await song.save();
+            res.json(song);
+        } else {
+            res.status(404).json({ message: 'Song not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to play song' });
+    }
+};
 
+const orderSong = async (req, res) => {
+    try {
+        const { userId, songId } = req.body;
+        if (!userId || !songId) {
+            return res.status(400).json({ message: 'userId and songId are required' });
+        }
+        // In a real app, you would get the user from auth middleware
+        const user = await User.findById(userId);
+        const song = await Song.findById(songId);
+
+        if (!user || !song) {
+            return res.status(404).json({ message: 'User or Song not found' });
+        }
+        const order = await Order.create({ user: user._id, song: song._id });
+        res.status(201).json(order);
+    } catch (err) {
+        console.error('Order error:', err);
+        res.status(500).json({ message: 'Failed to create order' });
+    }
+};
 
 
 module.exports = {
     getSongs,
     getRecentlyPlayed,
     getRecommended,
+    searchSongs,
+    playSong,
+    orderSong,
 };
