@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 import { motion } from 'framer-motion'
 
-const API_BASE ='http://localhost:4000'
+const API_BASE = 'http://localhost:3000'
 
 function useApi() {
   const client = useMemo(() => axios.create({ baseURL: API_BASE }), [])
@@ -55,8 +55,7 @@ function TopBar({ user }) {
           <p className="text-[11px] text-violet-300">{user.membershipType} Member</p>
         </div>
         <div className="px-8 mt-1">
-          <p className="text-xl font-semibold leading-tight">Listen The{` `}
-        </p>
+          <p className="text-xl font-semibold leading-tight">Listen The{` `}</p>
         </div>
       </div>
       <div className="p-2 rounded-full glass text-white/80 hover:text-white hover:shadow-glow transition">
@@ -84,7 +83,7 @@ function RecentlyPlayed({ songs, onPlay }) {
       <div className="mt-3 px-5 overflow-x-auto">
         <div className="flex gap-4 min-w-max">
           {songs.map((s) => (
-            <motion.div key={s._id} whileHover={{ y: -4 }} className="w-28 shrink-0" onClick={() => onPlay(s)}>
+            <motion.div key={s.spotifyId || s._id || `${s.title}-${s.artist}`} whileHover={{ y: -4 }} className="w-28 shrink-0" onClick={() => onPlay(s)}>
               <div className="w-28 h-28 rounded-xl overflow-hidden shadow-soft">
                 <img src={s.coverImage} alt={s.title} className="w-full h-full object-cover"/>
               </div>
@@ -105,7 +104,7 @@ function SearchResults({ songs, onPlay, onOrder }) {
         {songs.length > 0 ? (
           songs.map((s) => (
             <motion.div
-              key={s._id}
+              key={s.spotifyId || s._id || `${s.title}-${s.artist}`}
               whileHover={{ scale: 1.01 }}
               className="rounded-2xl bg-brand-card/60 glass p-3 flex items-center gap-3"
             >
@@ -132,11 +131,10 @@ function RecommendedList({ songs, onOrder, onPlay }) {
   return (
     <div className="mt-6">
       <h3 className="px-5 text-lg font-semibold">Recommend for you</h3>
-      {/* box songs */}
       <div className="mt-3 ml-2 pr-16 flex flex-col gap-3">
         {songs.map((s) => (
           <motion.div
-            key={s._id}
+            key={s.spotifyId || s._id || `${s.title}-${s.artist}`}
             whileHover={{ scale: 1.01 }}
             className="rounded-2xl bg-brand-card/60 glass p-1 flex items-center gap-3"
           >
@@ -189,7 +187,7 @@ function Player({ song }) {
         <p className="font-semibold text-white">{song.title}</p>
         <p className="text-sm text-gray-300">{song.artist}</p>
       </div>
-      <audio controls autoPlay src={song.previewUrl} className="w-full max-w-xs">
+      <audio controls autoPlay src={song.previewUrl || ''} className="w-full max-w-xs">
         Your browser does not support the audio element.
       </audio>
     </div>
@@ -221,14 +219,18 @@ export default function App() {
 
   useEffect(() => {
     async function load() {
-      const [r1, r2] = await Promise.all([
-        api.get('/api/songs/recent'),
-        api.get('/api/songs/recommended'),
-      ])
-      setRecent(r1.data)
-      setRecommended(r2.data)
+      try {
+        const [r1, r2] = await Promise.all([
+          api.get('/api/songs/recent'),
+          api.get('/api/songs/recommended'),
+        ])
+        setRecent(r1.data)
+        setRecommended(r2.data)
+      } catch (e) {
+        console.error('Failed to load initial lists', e)
+      }
     }
-    load().catch(console.error)
+    load()
   }, [api])
 
   async function handleSearch() {
@@ -239,7 +241,7 @@ export default function App() {
     }
     setIsSearching(true);
     try {
-      const res = await api.get(`/api/songs/search?q=${query}`);
+      const res = await api.get(`/api/songs/search?q=${encodeURIComponent(query)}`);
       setSearchResults(res.data);
     } catch (error) {
       console.error('Failed to search songs', error);
@@ -249,20 +251,36 @@ export default function App() {
   }
 
   async function handlePlay(song) {
+    // set current song immediately so audio starts
     setCurrentSong(song);
+
+    // Try to notify backend about the play (API-only endpoint)
     try {
-      await api.post(`/api/songs/${song._id}/play`);
-      // Refresh recently played
-      const res = await api.get('/api/songs/recent');
-      setRecent(res.data);
+      // prefer sending spotifyId & previewUrl; backend is API-only
+      await api.post('/api/songs/play', {
+        spotifyId: song.spotifyId,
+        previewUrl: song.previewUrl,
+        title: song.title,
+        artist: song.artist,
+        album: song.album,
+      });
+      // Optionally refresh recent list if backend maintains it (skip if backend is stateless)
+      // const res = await api.get('/api/songs/recent');
+      // setRecent(res.data);
     } catch (error) {
-      console.error('Failed to update play count', error);
+      // Do not interrupt playback if backend fails; just log
+      console.error('Failed to notify server about play', error);
     }
   }
 
   async function handleOrder(song) {
     try {
-      const res = await api.post('/api/songs/order', { userId: user._id, songId: song._id })
+      const res = await api.post('/api/songs/order', {
+        userId: user._id,
+        spotifyId: song.spotifyId,
+        title: song.title,
+        artist: song.artist,
+      })
       if (res.status === 201) {
         setToast(`Queued: ${song.title}`)
         setQuery('');
@@ -275,15 +293,10 @@ export default function App() {
     }
   }
 
-  { /* Render the main app layout */ }
   return (
     <div className="pb-28">
       <TopBar user={user} />
-      <div className="px-5 mt-4">
-        {/* <p className="text-2xl font-semibold leading-tight">Listen The{` `}
-          <span className="block">Latest Musics</span>
-        </p> */}
-      </div>
+      <div className="px-5 mt-4"></div>
       <SearchBar value={query} onChange={setQuery} onSearch={handleSearch} />
       
       {isSearching || query ? (
@@ -306,5 +319,3 @@ export default function App() {
     </div>
   )
 }
-
-

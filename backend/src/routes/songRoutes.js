@@ -13,7 +13,11 @@ router.route('/').get(getSongs);
 router.route('/recent').get(getRecentlyPlayed);
 router.route('/recommended').get(getRecommended);
 router.route('/search').get(searchSongs);
-router.route('/:id/play').post(playSong);
+
+// NOTE: API-only play route (no DB id)
+router.route('/play').post(playSong);
+
+// API-only order route
 router.route('/order').post(orderSong);
 
 module.exports = router;
