@@ -1,96 +1,278 @@
-const axios = require('axios');
 const Song = require('../models/Song');
 const User = require('../models/User');
 const Order = require('../models/Order');
+const iTunesService = require('../services/itunesService');
 
 // @desc    Get all songs
 // @route   GET /api/songs
 // @access  Public
+// @query   page - Page number (optional, default: 1)
+// @query   limit - Results per page (optional, default: 20)
 const getSongs = async (req, res) => {
     try {
-        const songs = await Song.find({});
-        res.json(songs);
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const skip = (page - 1) * limit;
+
+        const songs = await Song.find({})
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit);
+
+        const total = await Song.countDocuments({});
+
+        res.json({
+            success: true,
+            data: songs,
+            pagination: {
+                page,
+                limit,
+                total,
+                pages: Math.ceil(total / limit),
+            },
+        });
     } catch (error) {
-        res.status(500).json({ message: 'Server Error' });
+        console.error('Get songs error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch songs',
+        });
     }
 };
 
 // @desc    Get recently played songs
 // @route   GET /api/songs/recent
 // @access  Public
+// @query   limit - Maximum results (optional, default: 10)
 const getRecentlyPlayed = async (req, res) => {
     try {
-        const songs = await Song.find().sort({ lastPlayed: -1 }).limit(10);
-        res.json(songs);
+        const limit = parseInt(req.query.limit) || 10;
+        const songs = await Song.find({ lastPlayed: { $exists: true } })
+            .sort({ lastPlayed: -1 })
+            .limit(limit);
+
+        res.json({
+            success: true,
+            count: songs.length,
+            songs,
+        });
     } catch (error) {
-        res.status(500).json({ message: 'Failed to fetch recent songs' });
+        console.error('Get recently played error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch recent songs',
+        });
     }
 };
 
 // @desc    Get recommended songs
 // @route   GET /api/songs/recommended
 // @access  Public
+// @query   limit - Maximum results (optional, default: 10)
 const getRecommended = async (req, res) => {
     try {
-        // For now, recommendation is based on most played songs.
-        // A better approach would be to recommend based on user's listening history.
-        const songs = await Song.find().sort({ playCount: -1 }).limit(10);
-        res.json(songs);
+        const limit = parseInt(req.query.limit) || 10;
+        // Recommendation based on most played songs
+        // TODO: Enhance with user-based recommendations using listening history
+        const songs = await Song.find({ playCount: { $gt: 0 } })
+            .sort({ playCount: -1, lastPlayed: -1 })
+            .limit(limit);
+
+        res.json({
+            success: true,
+            count: songs.length,
+            songs,
+        });
     } catch (error) {
-        res.status(500).json({ message: 'Failed to fetch recommended songs' });
+        console.error('Get recommended error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch recommended songs',
+        });
     }
 };
 
-// @desc    Search for a song
+// @desc    Search for songs using iTunes API
 // @route   GET /api/songs/search
 // @access  Public
+// @query   q - Search query (required)
+// @query   limit - Maximum results (optional, default: 25)
+// @query   country - Country code for iTunes (optional, default: 'us')
 const searchSongs = async (req, res) => {
     try {
-        const { q } = req.query;
+        const { q, limit = 25, country = 'us' } = req.query;
 
-        // 1. Search local DB
+        // Validate query parameter
+        if (!q || q.trim().length === 0) {
+            return res.status(400).json({ 
+                success: false,
+                message: 'Search query is required' 
+            });
+        }
+
+        // 1. Search local database first for cached results
         const localSongs = await Song.find({
             $or: [
-                { title: { $regex: q, $options: 'i' } },
-                { artist: { $regex: q, $options: 'i' } },
-                { album: { $regex: q, $options: 'i' } },
+                { title: { $regex: q.trim(), $options: 'i' } },
+                { artist: { $regex: q.trim(), $options: 'i' } },
+                { album: { $regex: q.trim(), $options: 'i' } },
             ],
-        });
+        }).limit(parseInt(limit));
 
-        // 2. Search Deezer API
-        const deezerResponse = await axios.get(`https://api.deezer.com/search`, {
-            params: {
-                q: q,
-                limit: 25,
-            },
-        });
+        // 2. Search iTunes API for additional results
+        let iTunesTracks = [];
+        try {
+            iTunesTracks = await iTunesService.searchTracks(q, {
+                limit: parseInt(limit),
+                country: country.toLowerCase(),
+            });
+        } catch (iTunesError) {
+            console.error('iTunes search error:', iTunesError.message);
+            // If iTunes fails, return local results only
+            if (localSongs.length === 0) {
+                return res.status(503).json({
+                    success: false,
+                    message: 'Search service temporarily unavailable',
+                    songs: [],
+                });
+            }
+        }
 
-        const deezerSongs = deezerResponse.data.data.map(item => ({
-            title: item.title,
-            artist: item.artist.name,
-            album: item.album.title,
-            coverImage: item.album.cover_xl, // Get high resolution image
-            previewUrl: item.preview,
-        }));
+        // 3. Upsert iTunes tracks to local database
+        const upsertPromises = iTunesTracks
+            .filter(track => iTunesService.isValidTrack(track))
+            .map(async (trackData) => {
+                try {
+                    // Use trackId for unique identification if available
+                    const query = trackData.trackId
+                        ? { trackId: trackData.trackId }
+                        : {
+                            title: trackData.title,
+                            artist: trackData.artist,
+                            album: trackData.album || 'Unknown',
+                        };
 
-        // 3. Add new songs from Deezer to local DB
-        const upsertPromises = deezerSongs.map(songData =>
-            Song.findOneAndUpdate(
-                { title: songData.title, artist: songData.artist, album: songData.album },
-                { $setOnInsert: songData },
-                { upsert: true, new: true }
-            )
-        );
+                    const song = await Song.findOneAndUpdate(
+                        query,
+                        {
+                            $set: {
+                                ...trackData,
+                                // Don't overwrite playCount and lastPlayed if song exists
+                            },
+                            $setOnInsert: {
+                                playCount: 0,
+                            },
+                        },
+                        {
+                            upsert: true,
+                            new: true,
+                            runValidators: true,
+                        }
+                    );
+                    return song;
+                } catch (error) {
+                    console.error('Error upserting song:', error.message);
+                    return null;
+                }
+            });
+
         const newSongs = await Promise.all(upsertPromises);
+        const validNewSongs = newSongs.filter(song => song !== null);
 
-        // 4. Combine and de-duplicate results
-        const allSongs = [...localSongs, ...newSongs.filter(s => s)]; // filter out nulls if any
-        const uniqueSongs = Array.from(new Map(allSongs.map(song => [song._id.toString(), song])).values());
+        // 4. Combine and deduplicate results
+        const allSongs = [...localSongs, ...validNewSongs];
+        const songMap = new Map();
+        
+        allSongs.forEach(song => {
+            const key = song.trackId 
+                ? `trackId_${song.trackId}` 
+                : `${song.title}_${song.artist}_${song.album || ''}`;
+            
+            if (!songMap.has(key)) {
+                songMap.set(key, song);
+            } else {
+                // Keep the one with more data (prefer iTunes data)
+                const existing = songMap.get(key);
+                if (song.source === 'itunes' && existing.source !== 'itunes') {
+                    songMap.set(key, song);
+                }
+            }
+        });
 
-        res.json(uniqueSongs);
+        const uniqueSongs = Array.from(songMap.values());
+
+        // 5. Sort by relevance (songs with trackId first, then by title match)
+        uniqueSongs.sort((a, b) => {
+            const aHasTrackId = a.trackId ? 1 : 0;
+            const bHasTrackId = b.trackId ? 1 : 0;
+            if (aHasTrackId !== bHasTrackId) {
+                return bHasTrackId - aHasTrackId;
+            }
+            return a.title.localeCompare(b.title);
+        });
+
+        res.json({
+            success: true,
+            count: uniqueSongs.length,
+            songs: uniqueSongs.slice(0, parseInt(limit)),
+        });
     } catch (error) {
         console.error('Search error:', error);
-        res.status(500).json({ message: 'Failed to search songs' });
+        res.status(500).json({
+            success: false,
+            message: 'Failed to search songs',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+        });
+    }
+};
+
+// @desc    Get song by ID with full details
+// @route   GET /api/songs/:id
+// @access  Public
+const getSongById = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Try to find in local database first
+        let song = await Song.findById(id);
+
+        // If not found locally but has trackId, try to fetch from iTunes
+        if (!song && req.query.trackId) {
+            try {
+                const iTunesTrack = await iTunesService.getTrackById(
+                    parseInt(req.query.trackId),
+                    req.query.country || 'us'
+                );
+                if (iTunesTrack) {
+                    // Save to database
+                    song = await Song.findOneAndUpdate(
+                        { trackId: iTunesTrack.trackId },
+                        { $set: iTunesTrack },
+                        { upsert: true, new: true }
+                    );
+                }
+            } catch (iTunesError) {
+                console.error('iTunes lookup error:', iTunesError.message);
+            }
+        }
+
+        if (!song) {
+            return res.status(404).json({
+                success: false,
+                message: 'Song not found',
+            });
+        }
+
+        res.json({
+            success: true,
+            song,
+        });
+    } catch (error) {
+        console.error('Get song by ID error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch song',
+        });
     }
 };
 
@@ -99,44 +281,87 @@ const searchSongs = async (req, res) => {
 // @access  Public
 const playSong = async (req, res) => {
     try {
-        const song = await Song.findById(req.params.id);
-        if (song) {
-            song.playCount = (song.playCount || 0) + 1;
-            song.lastPlayed = new Date();
-            await song.save();
-            res.json(song);
-        } else {
-            res.status(404).json({ message: 'Song not found' });
+        const { id } = req.params;
+        const song = await Song.findById(id);
+
+        if (!song) {
+            return res.status(404).json({
+                success: false,
+                message: 'Song not found',
+            });
         }
+
+        song.playCount = (song.playCount || 0) + 1;
+        song.lastPlayed = new Date();
+        await song.save();
+
+        res.json({
+            success: true,
+            song,
+        });
     } catch (error) {
-        res.status(500).json({ message: 'Failed to play song' });
+        console.error('Play song error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update play count',
+        });
     }
 };
 
+// @desc    Create order for a song
+// @route   POST /api/songs/order
+// @access  Public
 const orderSong = async (req, res) => {
     try {
         const { userId, songId } = req.body;
+
         if (!userId || !songId) {
-            return res.status(400).json({ message: 'userId and songId are required' });
+            return res.status(400).json({
+                success: false,
+                message: 'userId and songId are required',
+            });
         }
+
         // In a real app, you would get the user from auth middleware
         const user = await User.findById(userId);
         const song = await Song.findById(songId);
 
-        if (!user || !song) {
-            return res.status(404).json({ message: 'User or Song not found' });
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found',
+            });
         }
-        const order = await Order.create({ user: user._id, song: song._id });
-        res.status(201).json(order);
-    } catch (err) {
-        console.error('Order error:', err);
-        res.status(500).json({ message: 'Failed to create order' });
+
+        if (!song) {
+            return res.status(404).json({
+                success: false,
+                message: 'Song not found',
+            });
+        }
+
+        const order = await Order.create({
+            user: user._id,
+            song: song._id,
+        });
+
+        res.status(201).json({
+            success: true,
+            order,
+        });
+    } catch (error) {
+        console.error('Order error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to create order',
+        });
     }
 };
 
 
 module.exports = {
     getSongs,
+    getSongById,
     getRecentlyPlayed,
     getRecommended,
     searchSongs,

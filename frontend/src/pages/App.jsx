@@ -78,19 +78,26 @@ function SearchBar({ value, onChange, onSearch }) {
 }
 
 function RecentlyPlayed({ songs, onPlay }) {
+  // Ensure songs is always an array
+  const songsArray = Array.isArray(songs) ? songs : [];
+  
   return (
     <div className="mt-7">
       <h3 className="px-5 text-lg font-semibold">Recently Played</h3>
       <div className="mt-3 px-5 overflow-x-auto">
         <div className="flex gap-4 min-w-max">
-          {songs.map((s) => (
+          {songsArray.length > 0 ? (
+            songsArray.map((s) => (
             <motion.div key={s._id} whileHover={{ y: -4 }} className="w-28 shrink-0" onClick={() => onPlay(s)}>
               <div className="w-28 h-28 rounded-xl overflow-hidden shadow-soft">
                 <img src={s.coverImage} alt={s.title} className="w-full h-full object-cover"/>
               </div>
               <p className="mt-2 text-xs text-white/90 line-clamp-2">{s.title}</p>
             </motion.div>
-          ))}
+            ))
+          ) : (
+            <p className="text-white/60 text-sm">No recently played songs</p>
+          )}
         </div>
       </div>
     </div>
@@ -98,12 +105,15 @@ function RecentlyPlayed({ songs, onPlay }) {
 }
 
 function SearchResults({ songs, onPlay, onOrder }) {
+  // Ensure songs is always an array
+  const songsArray = Array.isArray(songs) ? songs : [];
+  
   return (
     <div className="mt-6">
       <h3 className="px-5 text-lg font-semibold">Search Results</h3>
       <div className="mt-3 px-4 flex flex-col gap-3">
-        {songs.length > 0 ? (
-          songs.map((s) => (
+        {songsArray.length > 0 ? (
+          songsArray.map((s) => (
             <motion.div
               key={s._id}
               whileHover={{ scale: 1.01 }}
@@ -129,12 +139,16 @@ function SearchResults({ songs, onPlay, onOrder }) {
 }
 
 function RecommendedList({ songs, onOrder, onPlay }) {
+  // Ensure songs is always an array
+  const songsArray = Array.isArray(songs) ? songs : [];
+  
   return (
     <div className="mt-6">
       <h3 className="px-5 text-lg font-semibold">Recommend for you</h3>
       {/* box songs */}
       <div className="mt-3 ml-2 pr-16 flex flex-col gap-3">
-        {songs.map((s) => (
+        {songsArray.length > 0 ? (
+          songsArray.map((s) => (
           <motion.div
             key={s._id}
             whileHover={{ scale: 1.01 }}
@@ -150,7 +164,10 @@ function RecommendedList({ songs, onOrder, onPlay }) {
               Order Song
             </button>
           </motion.div>
-        ))}
+          ))
+        ) : (
+          <p className="px-5 text-white/60 text-sm">No recommendations available</p>
+        )}
       </div>
     </div>
   )
@@ -180,7 +197,13 @@ function BottomNav() {
 }
 
 function Player({ song }) {
+  const [usePreview, setUsePreview] = useState(true);
+  
   if (!song) return null;
+
+  // Determine which audio URL to use
+  const audioUrl = usePreview ? song.previewUrl : (song.fullTrackUrl || song.trackViewUrl || song.previewUrl);
+  const hasFullTrack = !!(song.fullTrackUrl || song.trackViewUrl);
 
   return (
     <div className="fixed bottom-20 left-1/2 -translate-x-1/2 w-[95%] max-w-4xl bg-gray-800/50 backdrop-blur-lg rounded-lg p-4 shadow-lg flex items-center gap-4">
@@ -188,8 +211,22 @@ function Player({ song }) {
       <div className="flex-1">
         <p className="font-semibold text-white">{song.title}</p>
         <p className="text-sm text-gray-300">{song.artist}</p>
+        {hasFullTrack && (
+          <button
+            onClick={() => setUsePreview(!usePreview)}
+            className="mt-1 text-xs text-violet-300 hover:text-violet-200"
+          >
+            {usePreview ? 'Switch to Full Track' : 'Switch to Preview'}
+          </button>
+        )}
       </div>
-      <audio controls autoPlay src={song.previewUrl} className="w-full max-w-xs">
+      <audio 
+        controls 
+        autoPlay 
+        src={audioUrl} 
+        className="w-full max-w-xs"
+        key={audioUrl} // Force re-render when URL changes
+      >
         Your browser does not support the audio element.
       </audio>
     </div>
@@ -221,14 +258,21 @@ export default function App() {
 
   useEffect(() => {
     async function load() {
-      const [r1, r2] = await Promise.all([
-        api.get('/api/songs/recent'),
-        api.get('/api/songs/recommended'),
-      ])
-      setRecent(r1.data)
-      setRecommended(r2.data)
+      try {
+        const [r1, r2] = await Promise.all([
+          api.get('/api/songs/recent'),
+          api.get('/api/songs/recommended'),
+        ])
+        // Extract songs array from response object
+        setRecent(r1.data?.songs || r1.data || [])
+        setRecommended(r2.data?.songs || r2.data || [])
+      } catch (error) {
+        console.error('Failed to load songs:', error)
+        setRecent([])
+        setRecommended([])
+      }
     }
-    load().catch(console.error)
+    load()
   }, [api])
 
   async function handleSearch() {
@@ -240,11 +284,15 @@ export default function App() {
     setIsSearching(true);
     try {
       const res = await api.get(`/api/songs/search?q=${query}`);
-      setSearchResults(res.data);
+      // Extract songs array from response object
+      setSearchResults(res.data?.songs || res.data || []);
     } catch (error) {
       console.error('Failed to search songs', error);
       setToast('Search failed');
       setTimeout(() => setToast(''), 2000);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
     }
   }
 
@@ -254,7 +302,8 @@ export default function App() {
       await api.post(`/api/songs/${song._id}/play`);
       // Refresh recently played
       const res = await api.get('/api/songs/recent');
-      setRecent(res.data);
+      // Extract songs array from response object
+      setRecent(res.data?.songs || res.data || []);
     } catch (error) {
       console.error('Failed to update play count', error);
     }
