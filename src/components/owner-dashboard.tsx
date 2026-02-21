@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { OrderDTO, OrderStatus } from "@/modules/orders/types";
 import { UserDTO } from "@/modules/users/types";
+import { apiUrl } from "@/lib/api-client";
 
 type ApiResponse<T> = {
   success: boolean;
@@ -17,14 +18,14 @@ export function OwnerDashboard() {
   const headers = useMemo(() => ({ "content-type": "application/json" }), []);
 
   async function loadOrders() {
-    const res = await fetch("/api/orders", { cache: "no-store" });
+    const res = await fetch(apiUrl("/api/orders"), { cache: "no-store" });
     const payload = (await res.json()) as ApiResponse<OrderDTO[]>;
     setOrders(payload.data ?? []);
   }
 
   useEffect(() => {
     async function boot() {
-      const userRes = await fetch("/api/users/demo?role=owner", { cache: "no-store" });
+      const userRes = await fetch(apiUrl("/api/users/demo?role=owner"), { cache: "no-store" });
       const userPayload = (await userRes.json()) as ApiResponse<UserDTO>;
       setOwner(userPayload.data);
       await loadOrders();
@@ -45,7 +46,7 @@ export function OwnerDashboard() {
   }, [toast]);
 
   async function updateStatus(orderId: string, status: OrderStatus) {
-    const res = await fetch(`/api/orders/${orderId}/status`, {
+    const res = await fetch(apiUrl(`/api/orders/${orderId}/status`), {
       method: "PATCH",
       headers,
       body: JSON.stringify({ status }),
@@ -72,7 +73,7 @@ export function OwnerDashboard() {
     clone.splice(target, 0, item);
 
     const orderedIds = clone.map((item2) => item2._id);
-    const res = await fetch("/api/orders/reorder", {
+    const res = await fetch(apiUrl("/api/orders/reorder"), {
       method: "POST",
       headers,
       body: JSON.stringify({ orderedIds }),
