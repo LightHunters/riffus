@@ -4,13 +4,25 @@ Independent modular-monolith backend for Riffus using:
 - NestJS + TypeScript
 - PostgreSQL + Prisma
 - Deezer + iTunes provider integration
+- **Google OAuth2 Authentication with Passport + JWT**
+
+> 🔐 **NEW**: This backend now includes Google OAuth2 authentication! See [OAUTH_SETUP.md](./OAUTH_SETUP.md) for detailed setup instructions.
 
 ## What This Service Does
 - Exposes API parity endpoints for songs, orders, and demo users.
 - Runs independently from the Next.js frontend.
+- **Handles Google OAuth2 login and JWT protected routes**
 - Uses standardized API envelopes:
   - success: `{ success: true, data: ... }`
   - error: `{ success: false, message: "...", details?: ... }`
+
+## Authentication (NEW!)
+- `GET /auth/google` - Initiate Google OAuth login
+- `GET /auth/google/callback` - OAuth callback (automatic redirect)
+- `GET /auth/profile` - Get current user (requires JWT)
+- `GET /auth/logout` - Logout (requires JWT)
+
+See [OAUTH_SETUP.md](./OAUTH_SETUP.md) for complete OAuth setup guide.
 
 ## Modules
 - `health`: liveness/readiness.

@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  back_end:
+    build: ./back_end
+    container_name: back_end
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    depends_on:
+      - posgres_db
+
+  front_end:
+    build: ./front_end
+    container_name: front_end
+    ports:
+      - "3001:3000"
+    env_file:
+      - .env
+    depends_on:
+      - back_end
+
+  posgres_db:
+    image: postgres:15
+    container_name: db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT}:5432"

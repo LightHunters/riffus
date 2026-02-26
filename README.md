@@ -1,81 +1,44 @@
-# Riffus
+# Project Setup & Run Guide
 
-Riffus is a cafe music app:
-- Customers search and request songs.
-- Cafe owners manage the queue and control playback.
+## Overview
+### This project is a full-stack app with:
 
-This repo now supports two backend modes:
-- Built-in Next.js API (MongoDB).
-- Independent NestJS backend in `backend/` (PostgreSQL + Prisma).
+- Backend: NestJS
 
-## Architecture
-- Frontend: Next.js App Router (`app/`, `src/components/`).
-- Current default backend: Next.js route handlers (`app/api/**`), Mongo via Mongoose.
-- New independent backend: NestJS modular monolith in `backend/`.
+- Frontend: Next.js
 
-## Frontend-Backend Toggle
-Frontend API calls use `NEXT_PUBLIC_API_URL`:
-- Empty or unset: use local Next.js APIs (`/api/...`).
-- Set to backend URL (for example `http://localhost:4001`): use Nest backend.
+- Database: PostgreSQL
 
-Example:
-```env
-NEXT_PUBLIC_API_URL=http://localhost:4001
+- We use Docker + Docker Compose to simplify setup, environment management, and deployment.
+
+- Two environments are supported:
+
+- Development: hot-reload, code changes reflected instantly.
+
+- Production: optimized images, no volume mounts, stable environment.
+
+We use Docker + Docker Compose to simplify setup, environment management, and deployment.
+
+#### Environment Variables
+create a `.env` file
+and then put these environment variables in that
 ```
 
-## Root App (Next.js) Setup
-1. Install dependencies:
-   - `npm install`
-2. Create `.env` from `.env.example`.
-3. Set at least:
-   - `MONGO_URI`
-4. Start:
-   - `npm run dev`
+POSTGRES_USER=dev
+POSTGRES_PASSWORD=root
+POSTGRES_DB=mxuc
+POSTGRES_PORT=5432
+```
 
-## Independent Backend (NestJS) Setup
-1. Go to backend:
-   - `cd backend`
-2. Install:
-   - `npm install`
-3. Create backend env from `backend/.env.example`.
-4. Run Prisma:
-   - `npm run prisma:generate`
-   - `npm run prisma:migrate`
-   - `npm run prisma:seed`
-5. Start backend:
-   - `npm run start:dev`
+#### Development
+##### You don't need to do anything for this.
 
-Default backend URL: `http://localhost:4001`
-Swagger docs: `http://localhost:4001/docs`
+Backend: configs/.env.back
 
-## API Contract (Both Backends)
-Envelope:
-- Success: `{ "success": true, "data": ... }`
-- Error: `{ "success": false, "message": "...", "details"?: ... }`
+Frontend: configs/.env.front
 
-Endpoints:
-- `GET /api/users/demo?role=customer|owner`
-- `GET /api/songs/recent?limit=10`
-- `GET /api/songs/recommended?limit=10`
-- `GET /api/songs/search?q=...&limit=25`
-- `POST /api/songs/:id/play`
-- `GET /api/orders?status=queued|playing|completed`
-- `POST /api/orders` with `{ userId, songId }`
-- `PATCH /api/orders/:id/status` with `{ status }`
-- `POST /api/orders/reorder` with `{ orderedIds: string[] }`
-- `GET /health/live` (Nest backend)
-- `GET /health/ready` (Nest backend)
+### Start Development Environment
+```bash
 
-## Scripts (Root)
-- `npm run dev`
-- `npm run build`
-- `npm run start`
-- `npm run typecheck`
-- `npm run backend:dev`
-- `npm run backend:build`
-- `npm run backend:test`
-
-## Notes
-- Keep both backends side-by-side until final cutover choice is made.
-- No automatic Mongo -> Postgres migration is included in this phase.
-- See `backend/README.md` for backend internals.
+docker compose -f docker-compose.dev.yml up --build
+```
