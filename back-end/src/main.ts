@@ -8,6 +8,7 @@ import { AppLogger } from "./common/logger/app.logger";
 import { appValidationPipe } from "./common/pipes/validation.pipe";
 import { PrismaService } from "./prisma/prisma.service";
 import { AppModule } from "./app.module";
+import * as cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
@@ -15,13 +16,14 @@ async function bootstrap() {
   app.useLogger(logger);
 
   const config = app.get(ConfigService);
-  const frontendOrigin = config.get<string>("FRONTEND_ORIGIN") ?? "http://localhost:3000";
+  const frontendOrigin = config.get<string>("FRONTEND_ORIGIN") ?? "http://localhost:4000";
   const port = config.get<number>("PORT") ?? 4001;
 
   app.enableCors({
     origin: [frontendOrigin],
     credentials: true,
   });
+  app.use(cookieParser)
 
   app.useGlobalPipes(appValidationPipe as ValidationPipe);
   app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());

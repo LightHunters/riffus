@@ -96,4 +96,8 @@ export class AuthService {
   async validateUser(id: string) {
     return this.usersService.findUserById(id);
   }
+
+  logout() {
+    return { message: 'Logged out successfully' };
+  }
 }

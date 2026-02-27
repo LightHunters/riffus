@@ -7,4 +7,8 @@ export const envValidationSchema = Joi.object({
   DEEZER_API_URL: Joi.string().uri().default("https://api.deezer.com"),
   ITUNES_API_URL: Joi.string().uri().default("https://itunes.apple.com"),
   FRONTEND_ORIGIN: Joi.string().uri().default("http://localhost:3000"),
+  JWT_SECRET: Joi.string().optional(),
+  GOOGLE_CLIENT_ID: Joi.string().required(),
+  GOOGLE_CLIENT_SECRET: Joi.string().required(),
+  GOOGLE_CALLBACK_URL: Joi.string().optional(),
 });

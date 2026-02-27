@@ -17,18 +17,8 @@ import { AuthModule } from "./auth/auth.module";
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ".env",
-      validationSchema: joi.object({
-        DATABASE_URL: joi.string().required(),
-        JWT_SECRET: joi.string().optional(),
-        GOOGLE_CLIENT_ID: joi.string().required(),
-        GOOGLE_CLIENT_SECRET: joi.string().required(),
-        GOOGLE_CALLBACK_URL: joi.string().optional(),
-        NODE_ENV: joi.string()
-          .valid('development', 'production', 'test')
-          .default('development'),
-        PORT: joi.number().default(3000),
-      }),
-
+      validationSchema: envValidationSchema,
+      expandVariables: true,
     }),
     HttpModule,
     PrismaModule,
