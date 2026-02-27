@@ -9,6 +9,7 @@ async function main() {
     create: {
       id: "seed-customer",
       name: "Guest",
+      email: "guest@riffus.com",
       role: UserRole.customer,
       membershipType: MembershipType.Guest,
       avatar: "https://i.pravatar.cc/120?img=5",
@@ -21,6 +22,7 @@ async function main() {
     create: {
       id: "seed-owner",
       name: "Cafe Owner",
+      email: "owner@riffus.com",
       role: UserRole.owner,
       membershipType: MembershipType.Gold,
       avatar: "https://i.pravatar.cc/120?img=12",

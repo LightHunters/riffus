@@ -17,8 +17,11 @@ CREATE TABLE "User" (
     "membershipType" "MembershipType" NOT NULL DEFAULT 'Guest',
     "avatar" TEXT NOT NULL DEFAULT '',
     "role" "UserRole" NOT NULL DEFAULT 'customer',
+    "googleId" TEXT,
+    "email" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
 );
 
@@ -38,6 +41,7 @@ CREATE TABLE "Song" (
     "itunesTrackId" INTEGER,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+
     CONSTRAINT "Song_pkey" PRIMARY KEY ("id")
 );
 
@@ -50,11 +54,18 @@ CREATE TABLE "Order" (
     "queuePosition" INTEGER NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+
     CONSTRAINT "Order_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
+CREATE UNIQUE INDEX "User_googleId_key" ON "User"("googleId");
+
+-- CreateIndex
 CREATE INDEX "User_role_idx" ON "User"("role");
+
+-- CreateIndex
+CREATE INDEX "User_googleId_idx" ON "User"("googleId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Song_deezerId_key" ON "Song"("deezerId");

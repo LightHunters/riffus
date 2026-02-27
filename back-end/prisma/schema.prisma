@@ -38,10 +38,14 @@ model User {
   avatar         String         @default("")
   role           UserRole       @default(customer)
   orders         Order[]
+  googleId       String?        @unique
+  email          String         @unique
+  password       String?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
   @@index([role])
+  @@index([googleId])
 }
 
 model Song {
